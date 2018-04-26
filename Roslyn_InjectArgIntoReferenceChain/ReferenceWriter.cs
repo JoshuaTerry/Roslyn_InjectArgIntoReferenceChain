@@ -40,13 +40,14 @@ namespace Roslyn_InjectArgIntoReferenceChain
             methodNames.Contains(node.Type.ToString()) && node.ArgumentList?.Arguments.Count == 0;
 
         // Add method parameter to qualifying member invocations:  Foo.Bar() => Foo.Bar(parmName)
-        public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
+         public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
         {
-            if (node.Expression is MemberAccessExpressionSyntax)
+            if (node.Expression is MemberAccessExpressionSyntax || node.Expression is IdentifierNameSyntax)
             {
-                var maes = node.Expression as MemberAccessExpressionSyntax;
+                var invocationName = node.Expression is MemberAccessExpressionSyntax ? (node.Expression as MemberAccessExpressionSyntax).Name.Identifier.ValueText : (node.Expression as IdentifierNameSyntax).Identifier.ValueText;
+                 
                 // If the invocation is one we need to change
-                if (methodNames.Contains(maes.Name.Identifier.ValueText))
+                if (methodNames.Contains(invocationName))
                 {
                     // Create a new method Argument List or Prepend your argument to the existing Argument List
                     if (node.ArgumentList == null || !node.ArgumentList.Arguments.Any(x => x.ToString() == parmName))
@@ -57,7 +58,8 @@ namespace Roslyn_InjectArgIntoReferenceChain
                         return SyntaxFactory.InvocationExpression(node.Expression, SyntaxFactory.ArgumentList(args));
                     }
                 }
-            }
+            } 
+
             return base.VisitInvocationExpression(node);
         }
 

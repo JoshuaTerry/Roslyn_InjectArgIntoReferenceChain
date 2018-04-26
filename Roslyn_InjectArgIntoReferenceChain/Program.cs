@@ -56,7 +56,7 @@ namespace Roslyn_InjectArgIntoReferenceChain
             yield return woods;
 
             // For each reference to this reference
-            foreach (var tree in woods.References.Select(x =>
+            foreach (var tree in woods.References.AsParallel().WithDegreeOfParallelism(10).Select(x =>
                                                         finder.GetReferenceTree(x.Location.Document.FilePath,
                                                         x.Symbol.GetQualifiedClassName(),
                                                         x.Node is MethodDeclarationSyntax ? (x.Node as MethodDeclarationSyntax).Identifier.ValueText :
@@ -67,7 +67,7 @@ namespace Roslyn_InjectArgIntoReferenceChain
                 yield return tree;
 
                 // Recursively get and yield all referencing methods  
-                foreach (var branch in tree.References
+                foreach (var branch in tree.References.AsParallel().WithDegreeOfParallelism(10)
                                     .SelectMany(x => FindReferences(
                                             finder,
                                             finder.GetReferenceTree(

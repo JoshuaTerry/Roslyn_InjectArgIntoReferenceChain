@@ -19,15 +19,15 @@ namespace Roslyn_InjectArgIntoReferenceChain
         private SyntaxNode GetNodeFromSymbol(string typeName) =>
             (GetTypeSymbols(typeName).FirstOrDefault() != null) ? (GetTypeSymbols(typeName).First() as ISymbol).DeclaringSyntaxReferences.First()?.SyntaxTree.GetRoot() : null;
         private IEnumerable<INamedTypeSymbol> GetTypeSymbols(string typeName) =>
-            Compilations.Values.Select(comp => comp.GetTypeByMetadataName(typeName))                                                //Get NamedTypeSymbols from each project
-            .Where(nts => nts != null);                                                                                             //Where the symbol isn't null
+            Compilations.Values.Select(comp => comp.GetTypeByMetadataName(typeName))                                                    //Get NamedTypeSymbols from each project
+            .Where(nts => nts != null);                                                                                                 //Where the symbol isn't null
         private IEnumerable<ReferencedSymbol> GetReferenceSymbols(IEnumerable<INamedTypeSymbol> symbols, string methodName) =>
-            symbols.Concat(symbols.SelectMany(s => s.GetMembers(methodName)))                                                       //Concat the symbol with its member symbols
-            .SelectMany(s => SymbolFinder.FindReferencesAsync(s, Solution).Result);                                                 //Get the ReferencedSymbols for each NamedTypeSymbol  
+            symbols.Concat(symbols.SelectMany(s => s.GetMembers(methodName)))                                                           //Concat the symbol with its member symbols
+            .SelectMany(s => SymbolFinder.FindReferencesAsync(s, Solution).Result);                                                     //Get the ReferencedSymbols for each NamedTypeSymbol  
         private IEnumerable<(ReferenceLocation, IEnumerable<SyntaxNode>)> GetReferenceNodes(IEnumerable<ReferencedSymbol> symbols)
-           => symbols.SelectMany(x => x.Locations                                                                                   //Get Locations for all the Symbols               
-               .Where(y => processedReferenceLocations.TryAdd(y, null)))                                                            //That have not been processed before                                                                             
-              .Select(x => (x, x.Location.SourceTree.GetRoot().FindToken(x.Location.SourceSpan.Start).Parent.AncestorsAndSelf()));  //Return Location and all referencing nodes         
+           => symbols.SelectMany(refSymbol => refSymbol.Locations                                                                       //Get Locations for all the Symbols               
+               .Where(refLocation => processedReferenceLocations.TryAdd(refLocation, null))).AsParallel().WithDegreeOfParallelism(10)   //That have not been processed before                                                                             
+              .Select(rl => (rl, rl.Location.SourceTree.GetRoot().FindToken(rl.Location.SourceSpan.Start).Parent.AncestorsAndSelf()));  //Return Location and all referencing nodes         
         
         // This returns all of the reference information for a particular node type (Method or Constructor)
         private IEnumerable<(ISymbol symbol, SyntaxNode node, ReferenceLocation location, string method)> GetSymbolBySyntaxType<T>((ReferenceLocation Location, IEnumerable<SyntaxNode> Nodes) locationAndNodes) where T : SyntaxNode

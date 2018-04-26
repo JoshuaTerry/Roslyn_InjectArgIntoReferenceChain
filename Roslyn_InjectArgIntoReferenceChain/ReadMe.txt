@@ -22,6 +22,11 @@ Before:
         {
             var test = new DBBase();
         }
+
+		public void Level1DirectMethodReference()
+        {
+            Level1ReferenceWithParm("foo");
+        }
     }
 
 	public class SecondReference
@@ -58,6 +63,11 @@ After:
         public void Level1ReferenceWithParm(MySession session, string foo)
         {
             var test = new DBBase(session);
+        }
+
+		public void Level1DirectMethodReference(MySession session)
+        {
+            Level1ReferenceWithParm(session, "foo");
         }
     }
 
