@@ -7,7 +7,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Roslyn_InjectArgIntoReferenceChain
 {
     public sealed class ReferenceWriter : CSharpSyntaxRewriter
-    {   
+    {
+        private string[] LinqMethods = new string[] { "Select", "SelectMany", "Where", "First", "FirstOrDefault", "Single", "SingleOrDefault" };
         private readonly HashSet<string> methodNames = null;
         private readonly string parmTypeName;
         private readonly string parmName;
@@ -45,24 +46,64 @@ namespace Roslyn_InjectArgIntoReferenceChain
             if (node.Expression is MemberAccessExpressionSyntax || node.Expression is IdentifierNameSyntax)
             {
                 var invocationName = node.Expression is MemberAccessExpressionSyntax ? (node.Expression as MemberAccessExpressionSyntax).Name.Identifier.ValueText : (node.Expression as IdentifierNameSyntax).Identifier.ValueText;
-                 
-                // If the invocation is one we need to change
-                if (methodNames.Contains(invocationName))
-                {
-                    // Create a new method Argument List or Prepend your argument to the existing Argument List
-                    if (node.ArgumentList == null || !node.ArgumentList.Arguments.Any(x => x.ToString() == parmName))
-                    {
-                        var arg = SyntaxFactory.Argument(SyntaxFactory.ParseName(parmName));
-                        var args = node.ArgumentList == null ? SyntaxFactory.SeparatedList<ArgumentSyntax>(new[] { arg }) : SyntaxFactory.SeparatedList<ArgumentSyntax>(node.ArgumentList.Arguments.ToArray().Prepend(arg));
 
-                        return SyntaxFactory.InvocationExpression(node.Expression, SyntaxFactory.ArgumentList(args));
-                    }
+                if (LinqMethods.Contains(invocationName) && node.ArgumentList != null && node.ArgumentList.Arguments.Any() && node.ArgumentList.Arguments.First().Expression is IdentifierNameSyntax)
+                {
+                    return CreateLambdaInvocation(node);
+                }
+                else if (methodNames.Contains(invocationName))
+                {
+                    return CreateInvocation(node);
                 }
             } 
 
             return base.VisitInvocationExpression(node);
         }
 
+        private InvocationExpressionSyntax CreateInvocation(InvocationExpressionSyntax node)
+        {
+            if (node.ArgumentList == null || !node.ArgumentList.Arguments.Any(x => x.ToString() == parmName))
+            {
+                var arg = SyntaxFactory.Argument(SyntaxFactory.ParseName(parmName));
+                var args = node.ArgumentList == null ? SyntaxFactory.SeparatedList<ArgumentSyntax>(new[] { arg }) : SyntaxFactory.SeparatedList<ArgumentSyntax>(node.ArgumentList.Arguments.ToArray().Prepend(arg));
+
+                return SyntaxFactory.InvocationExpression(node.Expression, SyntaxFactory.ArgumentList(args));
+            }
+            else
+                return node;
+        }
+        // This detects Reduced lambda references and injects the parameter appropriately
+        // ex. values.Select(x => ReducedLinqExampleMethod) becomes values.Select(x => ReducedLinqExampleMethod(newParm, x));
+        private InvocationExpressionSyntax CreateLambdaInvocation(InvocationExpressionSyntax node)
+        {
+            var firstArg = node.ArgumentList.Arguments.First().Expression as IdentifierNameSyntax;
+            if (methodNames.Contains(firstArg.Identifier.ValueText))
+            {
+                var arg = SyntaxFactory.Argument(SyntaxFactory.ParseName(parmName));
+
+                var lambda = SyntaxFactory.Argument(
+                    SyntaxFactory.SimpleLambdaExpression(
+                    SyntaxFactory.Parameter(
+                        SyntaxFactory.Identifier("x")),
+                    SyntaxFactory.InvocationExpression(
+                        SyntaxFactory.IdentifierName(firstArg.Identifier.ValueText))
+                        .WithArgumentList(
+                            SyntaxFactory.ArgumentList(
+                                SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                                    new SyntaxNodeOrToken[]
+                                    {
+                                                    SyntaxFactory.Argument(
+                                                        SyntaxFactory.IdentifierName(parmName)),
+                                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                                    SyntaxFactory.Argument(
+                                                        SyntaxFactory.IdentifierName("x"))
+                                    })))));
+                return SyntaxFactory.InvocationExpression(node.Expression, SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList<ArgumentSyntax>(node.ArgumentList.Arguments.Skip(1).ToArray().Prepend(lambda))));
+            }
+            else
+                return node;
+        }
+        
         private ArgumentSyntax CreateArgument() =>
            SyntaxFactory.Argument(SyntaxFactory.ParseName(parmName));
         private ParameterSyntax CreateParameter() =>
