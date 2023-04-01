@@ -2,7 +2,7 @@
 then find and inject this parameter into each generation of callers.  This will allow the parameters to be passed
 through the layers / up the stack.  This will find references in all projects in a Solution.
 
-Here is an example that adds a new Parameter to the DBBase Constructor and propagates it through the reference tree.
+Here is an example that adds a new Parameter (MySession session) to the DBBase Constructor and propagates it through the reference tree.
 
 Before:
 
